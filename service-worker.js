@@ -1,9 +1,9 @@
 const CACHE_NAME = "litter-box-cache-v1";
 const urlsToCache = [
-  "/", // caches the root (adjust if your site is in a subfolder)
-  "/index.html",
-  "/styles.css",
-  "/app.js",
+  "./",            // Cache the relative root.
+  "./index.html",
+  "./styles.css",
+  "./app.js",
 ];
 
 // Install event – cache essential files.
