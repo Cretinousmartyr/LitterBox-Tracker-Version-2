@@ -1,42 +1,14 @@
-const CACHE_NAME = "litter-box-cache-v1";
-const urlsToCache = [
-  "./",            // Cache the relative root.
-  "./index.html",
-  "./styles.css",
-  "./app.js",
-];
-
-// Install event – cache essential files.
-self.addEventListener("install", (event) => {
+self.addEventListener("install", function (event) {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(urlsToCache);
-    })
-  );
-  // Force the waiting service worker to become active.
-  self.skipWaiting();
-});
-
-// Activate event – clean up old caches.
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
+    caches.open("litter-box-cache").then(function (cache) {
+      return cache.addAll(["./index.html", "./manifest.json"]);
     })
   );
 });
 
-// Fetch event – serve cached assets if available.
-self.addEventListener("fetch", (event) => {
+self.addEventListener("fetch", function (event) {
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      // Return cached response if found; otherwise, fetch from network.
+    caches.match(event.request).then(function (response) {
       return response || fetch(event.request);
     })
   );
