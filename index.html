@@ -1,35 +1,287 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Litter Box Tracker</title>
-    <link rel="stylesheet" href="styles.css" />
-    <!-- Optional meta for a native-app-like feel -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-  </head>
-  <body>
-    <h1>Litter Box Tracker</h1>
-    <div id="boxes-container"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Litter Box Tracker</title>
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    /* Simple styling for a clean, clickable UI */
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1em;
+      background: #f0f0f0;
+    }
+    .litter-box {
+      background: #fff;
+      border-radius: 8px;
+      padding: 1em;
+      margin-bottom: 1em;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    .litter-box h2 {
+      margin: 0;
+      cursor: pointer;
+    }
+    .buttons {
+      margin-top: 0.5em;
+    }
+    button {
+      font-size: 1em;
+      padding: 0.5em 1em;
+      margin: 0.25em 0.5em 0.25em 0;
+    }
+    .history {
+      margin-top: 0.5em;
+      background: #fafafa;
+      padding: 0.5em;
+      border-radius: 5px;
+    }
+    .add-box {
+      margin-bottom: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Litter Box Tracker</h1>
+  <button id="addBox" class="add-box">Add Litter Box</button>
+  <div id="boxesContainer"></div>
 
-    <script src="app.js"></script>
-    <script>
-      // Register the service worker for offline support.
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker
-            .register("service-worker.js")
-            .then((registration) => {
-              console.log(
-                "ServiceWorker registration successful with scope:",
-                registration.scope
-              );
-            })
-            .catch((err) => {
-              console.log("ServiceWorker registration failed:", err);
-            });
-        });
+  <script>
+    // Global array to hold litter box data
+    let boxes = [];
+
+    // Load from localStorage or create 6 default boxes
+    function loadBoxes() {
+      const saved = localStorage.getItem("litterBoxes");
+      if (saved) {
+        boxes = JSON.parse(saved);
+      } else {
+        for (let i = 1; i <= 6; i++) {
+          boxes.push({
+            id: Date.now() + i,
+            name: "Litter Box " + i,
+            lastScooped: null,
+            lastCleaned: null,
+            history: []
+          });
+        }
+        saveBoxes();
       }
-    </script>
-  </body>
+    }
+
+    // Save boxes to localStorage
+    function saveBoxes() {
+      localStorage.setItem("litterBoxes", JSON.stringify(boxes));
+    }
+
+    // Utility: format a timestamp or return "Never"
+    function formatDate(timestamp) {
+      if (!timestamp) return "Never";
+      return new Date(timestamp).toLocaleString();
+    }
+
+    // Compute next scoop notification time:
+    // – 48 hours after last scooped, then every 8 hours if overdue
+    function getNextScoopTime(box) {
+      if (!box.lastScooped) return "Due now";
+      const base = new Date(box.lastScooped).getTime() + 48 * 60 * 60 * 1000;
+      let next = base;
+      const now = Date.now();
+      if (now <= next) return new Date(next).toLocaleString();
+      const interval = 8 * 60 * 60 * 1000;
+      const intervalsPassed = Math.ceil((now - base) / interval);
+      next = base + intervalsPassed * interval;
+      return new Date(next).toLocaleString();
+    }
+
+    // Compute next cleaning notification time:
+    // – 3 weeks after last cleaned, then every day if overdue
+    function getNextCleanTime(box) {
+      if (!box.lastCleaned) return "Due now";
+      const base = new Date(box.lastCleaned).getTime() + 21 * 24 * 60 * 60 * 1000;
+      let next = base;
+      const now = Date.now();
+      if (now <= next) return new Date(next).toLocaleString();
+      const interval = 24 * 60 * 60 * 1000;
+      const intervalsPassed = Math.ceil((now - base) / interval);
+      next = base + intervalsPassed * interval;
+      return new Date(next).toLocaleString();
+    }
+
+    // Render the UI for all litter boxes
+    function renderBoxes() {
+      const container = document.getElementById("boxesContainer");
+      container.innerHTML = "";
+      boxes.forEach((box, index) => {
+        const boxDiv = document.createElement("div");
+        boxDiv.className = "litter-box";
+
+        // Title with clickable rename
+        const title = document.createElement("h2");
+        title.textContent = box.name;
+        title.title = "Click to rename";
+        title.addEventListener("click", () => {
+          const newName = prompt("Enter new name:", box.name);
+          if (newName) {
+            box.name = newName;
+            saveBoxes();
+            renderBoxes();
+          }
+        });
+        boxDiv.appendChild(title);
+
+        // Display last scooped and cleaned times
+        const scoopInfo = document.createElement("p");
+        scoopInfo.textContent = "Last Scooped: " + formatDate(box.lastScooped);
+        boxDiv.appendChild(scoopInfo);
+
+        const cleanInfo = document.createElement("p");
+        cleanInfo.textContent = "Last Cleaned: " + formatDate(box.lastCleaned);
+        boxDiv.appendChild(cleanInfo);
+
+        // Show computed next notification times
+        const nextScoop = document.createElement("p");
+        nextScoop.textContent = "Next Scoop Notification: " + getNextScoopTime(box);
+        boxDiv.appendChild(nextScoop);
+
+        const nextClean = document.createElement("p");
+        nextClean.textContent = "Next Clean Notification: " + getNextCleanTime(box);
+        boxDiv.appendChild(nextClean);
+
+        // Buttons: Scooped, Cleaned, Toggle History, Delete Box
+        const buttonsDiv = document.createElement("div");
+        buttonsDiv.className = "buttons";
+
+        const scoopBtn = document.createElement("button");
+        scoopBtn.textContent = "Scooped";
+        scoopBtn.addEventListener("click", () => {
+          const now = Date.now();
+          box.lastScooped = now;
+          box.history.push({ type: "scoop", time: now });
+          saveBoxes();
+          renderBoxes();
+        });
+        buttonsDiv.appendChild(scoopBtn);
+
+        const cleanBtn = document.createElement("button");
+        cleanBtn.textContent = "Cleaned";
+        cleanBtn.addEventListener("click", () => {
+          const now = Date.now();
+          box.lastCleaned = now;
+          box.lastScooped = now; // deep cleaning counts as scooping
+          box.history.push({ type: "clean", time: now });
+          saveBoxes();
+          renderBoxes();
+        });
+        buttonsDiv.appendChild(cleanBtn);
+
+        const historyBtn = document.createElement("button");
+        historyBtn.textContent = "Toggle History";
+        historyBtn.addEventListener("click", () => {
+          const histDiv = boxDiv.querySelector(".history");
+          if (histDiv) {
+            histDiv.style.display = histDiv.style.display === "none" ? "block" : "none";
+          }
+        });
+        buttonsDiv.appendChild(historyBtn);
+
+        const deleteBoxBtn = document.createElement("button");
+        deleteBoxBtn.textContent = "Delete Box";
+        deleteBoxBtn.addEventListener("click", () => {
+          if (confirm("Delete this litter box?")) {
+            boxes.splice(index, 1);
+            saveBoxes();
+            renderBoxes();
+          }
+        });
+        buttonsDiv.appendChild(deleteBoxBtn);
+
+        boxDiv.appendChild(buttonsDiv);
+
+        // History view (initially hidden)
+        const historyDiv = document.createElement("div");
+        historyDiv.className = "history";
+        historyDiv.style.display = "none";
+        if (box.history.length === 0) {
+          historyDiv.textContent = "No history yet.";
+        } else {
+          // Show most recent first
+          box.history
+            .slice()
+            .reverse()
+            .forEach((entry) => {
+              const entryDiv = document.createElement("div");
+              entryDiv.textContent =
+                (entry.type === "scoop" ? "Scooped" : "Cleaned") +
+                " at " +
+                formatDate(entry.time);
+              // Button to delete this history entry
+              const delBtn = document.createElement("button");
+              delBtn.textContent = "Delete";
+              delBtn.style.marginLeft = "1em";
+              delBtn.addEventListener("click", () => {
+                const origIndex = box.history.findIndex(
+                  (e) => e.time === entry.time && e.type === entry.type
+                );
+                if (origIndex > -1) {
+                  box.history.splice(origIndex, 1);
+                  // Recalculate lastScooped and lastCleaned from remaining history
+                  box.lastScooped = null;
+                  box.lastCleaned = null;
+                  box.history.forEach((ev) => {
+                    if (ev.type === "scoop") {
+                      if (!box.lastScooped || ev.time > box.lastScooped) {
+                        box.lastScooped = ev.time;
+                      }
+                    }
+                    if (ev.type === "clean") {
+                      if (!box.lastCleaned || ev.time > box.lastCleaned) {
+                        box.lastCleaned = ev.time;
+                      }
+                    }
+                  });
+                  saveBoxes();
+                  renderBoxes();
+                }
+              });
+              entryDiv.appendChild(delBtn);
+              historyDiv.appendChild(entryDiv);
+            });
+        }
+        boxDiv.appendChild(historyDiv);
+
+        container.appendChild(boxDiv);
+      });
+    }
+
+    // Add new litter box
+    document.getElementById("addBox").addEventListener("click", () => {
+      const name = prompt("Enter name for new litter box:", "New Litter Box");
+      if (name) {
+        boxes.push({
+          id: Date.now(),
+          name: name,
+          lastScooped: null,
+          lastCleaned: null,
+          history: []
+        });
+        saveBoxes();
+        renderBoxes();
+      }
+    });
+
+    // Initialize the app
+    loadBoxes();
+    renderBoxes();
+
+    // Register service worker for offline support and installability
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("service-worker.js")
+        .then(() => console.log("Service Worker Registered"));
+    }
+  </script>
+</body>
 </html>
